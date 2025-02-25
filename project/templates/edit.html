@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Text Editor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+        
+        .toolbar {
+            width: 250px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .editor-container {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .pdf-container {
+            flex: 1;
+            border: 1px solid #ddd;
+            margin-bottom: 20px;
+            overflow: auto;
+        }
+        
+        .style-group {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            background: white;
+        }
+        
+        .style-group h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .control-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        
+        select, input, button {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+        }
+        
+        .action-buttons button.secondary {
+            background: #666;
+        }
+        
+        .action-buttons button.secondary:hover {
+            background: #555;
+        }
+        
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .status-message.success {
+            background: #dff0d8;
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
+        }
+        
+        .status-message.error {
+            background: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div class="style-group">
+            <h3>Font</h3>
+            <div class="control-row">
+                <select id="fontFamily">
+                    <option value="helvetica">Helvetica</option>
+                    <option value="times">Times</option>
+                    <option value="courier">Courier</option>
+                </select>
+                <input type="number" id="fontSize" value="12" min="6" max="72">
+            </div>
+        </div>
+        
+        <div class="style-group">
+            <h3>Style</h3>
+            <div class="control-row">
+                <button id="boldBtn">B</button>
+                <button id="italicBtn">I</button>
+                <button id="underlineBtn">U</button>
+            </div>
+        </div>
+        
+        <div class="style-group">
+            <h3>Alignment</h3>
+            <div class="control-row">
+                <button id="alignLeftBtn">Left</button>
+                <button id="alignCenterBtn">Center</button>
+                <button id="alignRightBtn">Right</button>
+                <button id="alignJustifyBtn">Justify</button>
+            </div>
+        </div>
+        
+        <div class="style-group">
+            <h3>Spacing</h3>
+            <div class="control-row">
+                <label>Line Height:</label>
+                <input type="number" id="lineHeight" value="1.2" min="1" max="3" step="0.1">
+            </div>
+            <div class="control-row">
+                <label>Letter Spacing:</label>
+                <input type="number" id="letterSpacing" value="0" min="-2" max="10" step="0.1">
+            </div>
+        </div>
+        
+        <div class="action-buttons">
+            <button id="saveBtn">Save Changes</button>
+            <button id="revertBtn" class="secondary">Revert Changes</button>
+            <button id="downloadBtn" class="secondary">Download PDF</button>
+        </div>
+    </div>
+    
+    <div class="editor-container">
+        <div class="pdf-container" id="pdfContainer"></div>
+        <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <script>
+        let sessionId = '{{ session_id }}';
+        let currentSelection = null;
+        
+        // Initialize PDF viewer
+        async function initPdfViewer() {
+            try {
+                const response = await fetch(`/preview/${sessionId}`);
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                const container = document.getElementById('pdfContainer');
+                const iframe = document.createElement('iframe');
+                iframe.src = url;
+                iframe.style.width = '100%';
+                iframe.style.height = '100%';
+                iframe.style.border = 'none';
+                container.appendChild(iframe);
+            } catch (error) {
+                showStatus('Failed to load PDF', false);
+            }
+        }
+        
+        // Apply text style changes
+        async function applyStyle(changes) {
+            if (!currentSelection) {
+                showStatus('Please select text first', false);
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/apply_style', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        changes: [{
+                            ...changes,
+                            selection: currentSelection
+                        }]
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('Changes applied successfully', true);
+                    refreshPdfView();
+                } else {
+                    showStatus(result.message || 'Failed to apply changes', false);
+                }
+            } catch (error) {
+                showStatus('Error applying changes', false);
+            }
+        }
+        
+        // Refresh PDF view
+        function refreshPdfView() {
+            const container = document.getElementById('pdfContainer');
+            const iframe = container.querySelector('iframe');
+            if (iframe) {
+                iframe.src = iframe.src;
+            }
+        }
+        
+        // Show status message
+        function showStatus(message, isSuccess) {
+            const status = document.getElementById('statusMessage');
+            status.textContent = message;
+            status.className = 'status-message ' + (isSuccess ? 'success' : 'error');
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Event Listeners
+        document.getElementById('fontFamily').addEventListener('change', e => {
+            applyStyle({ type: 'font_family', value: e.target.value });
+        });
+        
+        document.getElementById('fontSize').addEventListener('change', e => {
+            applyStyle({ type: 'font_size', value: parseFloat(e.target.value) });
+        });
+        
+        document.getElementById('boldBtn').addEventListener('click', () => {
+            applyStyle({ type: 'bold', value: true });
+        });
+        
+        document.getElementById('italicBtn').addEventListener('click', () => {
+            applyStyle({ type: 'italic', value: true });
+        });
+        
+        document.getElementById('underlineBtn').addEventListener('click', () => {
+            applyStyle({ type: 'underline', value: true });
+        });
+        
+        document.getElementById('lineHeight').addEventListener('change', e => {
+            applyStyle({ type: 'line_height', value: parseFloat(e.target.value) });
+        });
+        
+        document.getElementById('letterSpacing').addEventListener('change', e => {
+            applyStyle({ type: 'letter_spacing', value: parseFloat(e.target.value) });
+        });
+        
+        document.getElementById('saveBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                
+                const result = await response.json();
+                showStatus(result.message, result.success);
+            } catch (error) {
+                showStatus('Error saving changes', false);
+            }
+        });
+        
+        document.getElementById('revertBtn').addEventListener('click', async () => {
+            if (confirm('Are you sure you want to revert all changes?')) {
+                try {
+                    const response = await fetch('/api/revert', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            session_id: sessionId
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        sessionId = result.new_session_id;
+                        refreshPdfView();
+                        showStatus('Changes reverted successfully', true);
+                    } else {
+                        showStatus('Failed to revert changes', false);
+                    }
+                } catch (error) {
+                    showStatus('Error reverting changes', false);
+                }
+            }
+        });
+        
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            window.location.href = `/download/${sessionId}`;
+        });
+        
+        // Initialize viewer when page loads
+        window.addEventListener('load', initPdfViewer);
+    </script>
+</body>
+</html>

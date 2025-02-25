@@ -1,0 +1,9 @@
+Flask==2.3.3
+PyMuPDF==1.23.3
+Pillow==10.0.0
+numpy==1.25.2
+pytesseract==0.3.10
+Werkzeug==2.3.7
+click>=8.0
+itsdangerous>=2.0
+Jinja2>=3.0
