@@ -1,0 +1,13 @@
+{
+    "features": {
+      "claude_3_7_sonnet": {
+        "thinking": {
+          "enabled": true,
+          "preview": true,
+          "all_clients": true
+        }
+      }
+    },
+    "version": "1.0.0",
+    "last_updated": "2023-11-15"
+  }
